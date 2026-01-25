@@ -143,37 +143,70 @@ URL_REGEX = r"https?://[^\s]+"
 
 class Classifier:
     def predict(self, text: str):
-        msg = text.lower()
+        msg = text.lower().strip()
         score = 0
+        hard_trigger = False
 
-        # Keyword rules
-        for k in SCAM_KEYWORDS:
+        # ==============================
+        # 0️⃣ GREETING / SHORT TEXT FILTER
+        # ==============================
+        if len(msg.split()) <= 2:
+            # hi, hello bro, ok, yes etc
+            return False, 0.05
+
+        # ==============================
+        # 1️⃣ KEYWORD MATCH (BASE ONLY)
+        # ==============================
+        for k in BASE_SCAM_KEYWORDS:
             if k in msg:
                 score += 1
 
-        # Dataset similarity
-        for s in DATASET:
-            if s in msg or msg in s:
-                score += 3
-                break
+        # ==============================
+        # 2️⃣ DATASET SIMILARITY (SAFE)
+        # ==============================
+        if len(msg) > 15:
+            for s in DATASET:
+                if s in msg:
+                    score += 3
+                    break
 
-        # Strong rules
+        # ==============================
+        # 3️⃣ HARD SCAM RULES (PRIORITY)
+        # ==============================
         if re.search(UPI_REGEX, msg):
             score += 7
+            hard_trigger = True
+
         if "otp" in msg:
             score += 6
-        if "send" in msg and "money" in msg:
-            score += 5
+            hard_trigger = True
 
-        # ML prediction
+        if "send" in msg and ("money" in msg or "amount" in msg):
+            score += 5
+            hard_trigger = True
+
+        # ==============================
+        # 4️⃣ ML MODEL (CONTROLLED)
+        # ==============================
         ml_conf = 0.0
         if ML_MODEL and VECTORIZER:
-            vec = VECTORIZER.transform([msg])
-            ml_conf = ML_MODEL.predict_proba(vec)[0][1]
-            score += int(ml_conf * 6)
+            try:
+                vec = VECTORIZER.transform([msg])
+                ml_conf = ML_MODEL.predict_proba(vec)[0][1]
+                score += int(ml_conf * 4)   # ❗ reduced impact
+            except:
+                ml_conf = 0.0
 
+        # ==============================
+        # 5️⃣ FINAL DECISION
+        # ==============================
         confidence = min((score / 12 + ml_conf) / 2, 1.0)
-        return score >= 5 or ml_conf > 0.6, confidence
+
+        if hard_trigger:
+            return True, max(confidence, 0.7)
+
+        return score >= 8, confidence
+
 
 CLASSIFIER = Classifier()
 
