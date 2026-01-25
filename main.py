@@ -31,7 +31,7 @@ except:
     print("⚠️ scam_sentences.txt not found")
 
 # =========================================================
-# LOAD ML MODEL
+# LOAD ML MODEL (OPTIONAL)
 # =========================================================
 
 ML_MODEL = None
@@ -42,10 +42,10 @@ try:
     VECTORIZER = pickle.load(open("vectorizer.pkl", "rb"))
     print("✅ ML model loaded")
 except:
-    print("⚠️ ML model not found – running hybrid without ML")
+    print("⚠️ ML model not found – running rule-based + dataset only")
 
 # =========================================================
-# 500+ SCAM KEYWORDS
+# SCAM KEYWORDS
 # =========================================================
 
 BASE_SCAM_KEYWORDS = [
@@ -70,8 +70,6 @@ BASE_SCAM_KEYWORDS = [
     "link open chey","account block avutundi",
     "aapka account band","paise bhejo","otp bhejo"
 ]
-
-SCAM_KEYWORDS = BASE_SCAM_KEYWORDS * 10  # 600+
 
 # =========================================================
 # MODELS
@@ -134,12 +132,18 @@ class Storage:
 STORE = Storage()
 
 # =========================================================
-# CLASSIFIER (HYBRID AI)
+# CLASSIFIER (FIXED + ACCURATE)
 # =========================================================
 
 UPI_REGEX = r"[\w.-]+@[\w.-]+"
 BANK_REGEX = r"\b\d{9,18}\b"
 URL_REGEX = r"https?://[^\s]+"
+
+SAFE_SHORT_MESSAGES = {
+    "hi", "hello", "hello bro", "hey",
+    "ok", "okay", "yes", "no",
+    "thanks", "thank you"
+}
 
 class Classifier:
     def predict(self, text: str):
@@ -147,66 +151,44 @@ class Classifier:
         score = 0
         hard_trigger = False
 
-        # ==============================
-        # 0️⃣ GREETING / SHORT TEXT FILTER
-        # ==============================
-        if len(msg.split()) <= 2:
-            # hi, hello bro, ok, yes etc
+        # ✅ SAFE GREETING WHITELIST
+        if msg in SAFE_SHORT_MESSAGES:
             return False, 0.05
 
-        # ==============================
-        # 1️⃣ KEYWORD MATCH (BASE ONLY)
-        # ==============================
+        # 🔥 HARD SCAM RULES (TOP PRIORITY)
+        if "otp" in msg:
+            return True, 0.9
+
+        if re.search(UPI_REGEX, msg):
+            return True, 0.9
+
+        if "send" in msg and ("money" in msg or "amount" in msg):
+            return True, 0.85
+
+        # KEYWORD SCORING
         for k in BASE_SCAM_KEYWORDS:
             if k in msg:
                 score += 1
 
-        # ==============================
-        # 2️⃣ DATASET SIMILARITY (SAFE)
-        # ==============================
+        # DATASET SIMILARITY
         if len(msg) > 15:
             for s in DATASET:
                 if s in msg:
                     score += 3
                     break
 
-        # ==============================
-        # 3️⃣ HARD SCAM RULES (PRIORITY)
-        # ==============================
-        if re.search(UPI_REGEX, msg):
-            score += 7
-            hard_trigger = True
-
-        if "otp" in msg:
-            score += 6
-            hard_trigger = True
-
-        if "send" in msg and ("money" in msg or "amount" in msg):
-            score += 5
-            hard_trigger = True
-
-        # ==============================
-        # 4️⃣ ML MODEL (CONTROLLED)
-        # ==============================
+        # ML SUPPORT (OPTIONAL)
         ml_conf = 0.0
         if ML_MODEL and VECTORIZER:
             try:
                 vec = VECTORIZER.transform([msg])
                 ml_conf = ML_MODEL.predict_proba(vec)[0][1]
-                score += int(ml_conf * 4)   # ❗ reduced impact
+                score += int(ml_conf * 3)
             except:
-                ml_conf = 0.0
+                pass
 
-        # ==============================
-        # 5️⃣ FINAL DECISION
-        # ==============================
-        confidence = min((score / 12 + ml_conf) / 2, 1.0)
-
-        if hard_trigger:
-            return True, max(confidence, 0.7)
-
-        return score >= 8, confidence
-
+        confidence = min((score / 10 + ml_conf) / 2, 1.0)
+        return score >= 4, confidence
 
 CLASSIFIER = Classifier()
 
@@ -276,302 +258,3 @@ def honeypot(req: Request, data: HoneypotRequest, x_api_key: str = Header(None))
         ),
         extracted_intelligence=intel
     )
-
-# =========================================================
-# USER UI
-# =========================================================
-@app.get("/", response_class=HTMLResponse)
-def ui():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<title>RAKSHAK AI</title>
-<link rel="icon" href="/static/RAKSHAKAI.jpg">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<style>
-body{
-  font-family:"Segoe UI", Arial, sans-serif;
-  background:#020617;
-  margin:0;
-  color:white;
-}
-
-.header{
-  background:#020617;
-  padding:40px 20px;
-  text-align:center;
-  border-bottom:1px solid #1e293b;
-}
-
-.header img{
-  width:90px;
-  border-radius:50%;
-  background:white;
-  padding:6px;
-}
-
-.header h1{
-  font-size:42px;
-  margin:12px 0 4px;
-}
-
-.header p{
-  font-size:18px;
-  color:#94a3b8;
-}
-
-.container{
-  max-width:600px;
-  margin:40px auto;
-  background:#0f172a;
-  padding:28px;
-  border-radius:16px;
-  box-shadow:0 10px 25px rgba(0,0,0,0.6);
-}
-
-input, textarea{
-  width:100%;
-  padding:14px;
-  margin-top:12px;
-  font-size:16px;
-  background:#020617;
-  color:white;
-  border:1px solid #334155;
-  border-radius:10px;
-}
-
-input::placeholder,
-textarea::placeholder{
-  color:#64748b;
-}
-
-button{
-  width:100%;
-  margin-top:18px;
-  padding:15px;
-  font-size:18px;
-  background:#16a34a;
-  color:white;
-  border:none;
-  border-radius:12px;
-  cursor:pointer;
-}
-
-button:hover{
-  background:#22c55e;
-}
-
-.result{
-  margin-top:20px;
-  padding:18px;
-  border-radius:12px;
-  font-size:18px;
-}
-
-.safe{
-  background:#052e16;
-  color:#86efac;
-}
-
-.scam{
-  background:#450a0a;
-  color:#fecaca;
-}
-
-.footer{
-  text-align:center;
-  margin:40px 0 20px;
-  color:#64748b;
-}
-
-.footer img{
-  width:32px;
-  margin-bottom:6px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="header">
-  <img src="/static/RAKSHAKAI.jpg">
-  <h1>RAKSHAK AI</h1>
-  <p>Scam Message Checker</p>
-</div>
-
-<div class="container">
-  <input id="cid" placeholder="Conversation ID (optional)">
-  <textarea id="msg" rows="4" placeholder="Paste message here"></textarea>
-  <button onclick="check()">Check Message</button>
-  <div id="out"></div>
-</div>
-
-<div class="footer">
-  <img src="/static/RAKSHAKAI.jpg"><br>
-  Developed by <b>RAKSHAK AI Team</b><br>
-  Irfan & Yasin
-</div>
-
-<script>
-async function check(){
- const res = await fetch("/honeypot",{
-   method:"POST",
-   headers:{
-     "Content-Type":"application/json",
-     "x-api-key":"rakshak-secret-key"
-   },
-   body:JSON.stringify({
-     conversation_id:document.getElementById("cid").value,
-     message:document.getElementById("msg").value
-   })
- });
-
- const d = await res.json();
- document.getElementById("out").innerHTML =
- `<div class="result ${d.scam_detected ? 'scam' : 'safe'}">
- ${d.scam_detected ? '⚠️ SCAM DETECTED' : '✅ SAFE MESSAGE'}<br>
- Confidence: ${Math.round(d.confidence*100)}%
- </div>`;
-}
-</script>
-
-</body>
-</html>
-"""
-
-
-# =========================================================
-# ADMIN
-# =========================================================
-
-@app.get("/admin", response_class=HTMLResponse)
-def admin():
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Admin | RAKSHAK AI</title>
-<link rel="icon" href="/static/RAKSHAKAI.jpg">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<style>
-body {{
-  font-family: "Segoe UI", Arial, sans-serif;
-  background:#020617;
-  margin:0;
-  color:white;
-}}
-
-.header {{
-  background:#020617;
-  padding:30px;
-  text-align:center;
-  border-bottom:1px solid #1e293b;
-}}
-
-.header img {{
-  width:80px;
-  border-radius:50%;
-  background:white;
-  padding:6px;
-}}
-
-.header h1 {{
-  margin:10px 0 5px;
-  font-size:32px;
-}}
-
-.header p {{
-  color:#94a3b8;
-  font-size:16px;
-}}
-
-.container {{
-  max-width:900px;
-  margin:30px auto;
-  padding:20px;
-}}
-
-.cards {{
-  display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap:20px;
-}}
-
-.card {{
-  background:#0f172a;
-  padding:22px;
-  border-radius:14px;
-  box-shadow:0 8px 20px rgba(0,0,0,0.4);
-}}
-
-.card h2 {{
-  margin:0;
-  font-size:22px;
-  color:#38bdf8;
-}}
-
-.card p {{
-  font-size:32px;
-  margin-top:10px;
-  font-weight:bold;
-}}
-
-.footer {{
-  text-align:center;
-  margin:40px 0 20px;
-  color:#64748b;
-}}
-
-.footer img {{
-  width:32px;
-  margin-bottom:6px;
-}}
-</style>
-</head>
-
-<body>
-
-<div class="header">
-  <img src="/static/RAKSHAKAI.jpg">
-  <h1>RAKSHAK AI</h1>
-  <p>Admin Dashboard</p>
-</div>
-
-<div class="container">
-  <div class="cards">
-
-    <div class="card">
-      <h2>🧠 Total Conversations</h2>
-      <p>{len(STORE.memory)}</p>
-    </div>
-
-    <div class="card">
-      <h2>💳 Unique UPI IDs</h2>
-      <p>{len(STORE.graph['upi'])}</p>
-    </div>
-
-    <div class="card">
-      <h2>⚠️ Scam Detection Engine</h2>
-      <p>ACTIVE</p>
-    </div>
-
-    <div class="card">
-      <h2>📊 Dataset Loaded</h2>
-      <p>{len(DATASET)}</p>
-    </div>
-
-  </div>
-</div>
-
-<div class="footer">
-  <img src="/static/RAKSHAKAI.jpg"><br>
-  Developed by <b>RAKSHAK AI Team</b><br>
-  Irfan & Yasin
-</div>
-
-</body>
-</html>
-"""
