@@ -34,11 +34,13 @@ except:
 # 500+ SCAM KEYWORDS (AUTO EXPANDED)
 # =========================================================
 BASE_KEYWORDS = [
-    "otp","send money","verify","account blocked","account suspended",
-    "bank alert","security alert","upi blocked","refund","kyc",
-    "aadhaar","pan","credit card","debit card","cvv","expiry",
-    "loan approved","processing fee","telegram job","whatsapp job",
-    "legal notice","customs","parcel seized","click here","urgent",
+    "otp","send money","easy money","earn money","verify",
+    "account blocked","account suspended","bank alert",
+    "security alert","upi blocked","refund","kyc",
+    "aadhaar","pan","credit card","debit card","cvv",
+    "expiry","loan approved","processing fee",
+    "telegram job","whatsapp job","legal notice",
+    "customs","parcel seized","click here","urgent",
     "final warning","limited time","immediate action"
 ]
 
@@ -48,7 +50,7 @@ for k in BASE_KEYWORDS:
         SCAM_KEYWORDS.append(k + p)
 
 # =========================================================
-# SAFE MESSAGE WHITELIST (FALSE POSITIVE CONTROL)
+# SAFE GREETINGS ONLY (STRICT)
 # =========================================================
 SAFE_MESSAGES = {
     "hi","hello","hey","ok","okay","yes","no","thanks","thank you"
@@ -78,26 +80,32 @@ class HoneypotResponse(BaseModel):
     reply: str
 
 # =========================================================
-# CORE DETECTION ENGINE (MAX ACCURACY)
+# CORE DETECTION ENGINE (FIXED + MAX ACCURACY)
 # =========================================================
 def detect(msg: str):
     msg = msg.lower().strip()
     score = 0
     ml_conf = 0.0
 
-    # 1️⃣ Safe short messages
-    if msg in SAFE_MESSAGES or len(msg.split()) <= 2:
-        return False, 0.05
-
-    # 2️⃣ HARD SCAM RULES (NON-NEGOTIABLE)
+    # 🔥 1️⃣ HARD SCAM TRIGGERS (TOP PRIORITY)
     if "otp" in msg:
         return True, 0.95
+
     if re.search(UPI_REGEX, msg):
         return True, 0.95
-    if re.search(URL_REGEX, msg) and ("verify" in msg or "click" in msg):
-        return True, 0.90
+
+    if "easy money" in msg or "earn money" in msg:
+        return True, 0.80
+
     if "send" in msg and ("money" in msg or "amount" in msg):
         return True, 0.90
+
+    if re.search(URL_REGEX, msg) and ("verify" in msg or "click" in msg):
+        return True, 0.90
+
+    # ✅ 2️⃣ SAFE GREETINGS (ONLY PURE)
+    if msg in SAFE_MESSAGES:
+        return False, 0.05
 
     # 3️⃣ KEYWORD SCORING
     for k in SCAM_KEYWORDS:
@@ -110,7 +118,7 @@ def detect(msg: str):
             score += 5
             break
 
-    # 5️⃣ ML MODEL SUPPORT (CONTROLLED)
+    # 5️⃣ ML SUPPORT (CONTROLLED)
     if ML_MODEL and VECTORIZER:
         try:
             vec = VECTORIZER.transform([msg])
@@ -172,7 +180,7 @@ button{padding:12px 26px;border-radius:20px;background:#22c55e;border:none}
 </head>
 <body>
 <h2>Scam Message Checker</h2>
-<textarea id="msg"></textarea><br><br>
+<textarea id="msg" placeholder="Paste message here"></textarea><br><br>
 <button onclick="go()">Analyze</button>
 <h3 id="out"></h3>
 <script>
@@ -214,7 +222,7 @@ def admin():
 """
 
 # =========================================================
-# HONEYPOT API (TESTER USE)
+# HONEYPOT API (GUVI TESTER)
 # =========================================================
 @app.post("/honeypot", response_model=HoneypotResponse)
 def honeypot(data: HoneypotRequest, x_api_key: str = Header(None)):
