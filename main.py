@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import os, re, random, pickle
@@ -71,7 +71,7 @@ class HoneypotResponse(BaseModel):
     reply: str
 
 # =========================================================
-# CORE ENGINE
+# CORE DETECTION ENGINE
 # =========================================================
 def detect(msg: str):
     msg = msg.lower().strip()
@@ -80,16 +80,12 @@ def detect(msg: str):
 
     if "otp" in msg:
         return True, 0.95
-
     if re.search(UPI_REGEX, msg):
         return True, 0.95
-
     if "easy money" in msg or "earn money" in msg:
         return True, 0.80
-
     if "send" in msg and ("money" in msg or "amount" in msg):
         return True, 0.90
-
     if re.search(URL_REGEX, msg) and ("verify" in msg or "click" in msg):
         return True, 0.90
 
@@ -117,16 +113,15 @@ def detect(msg: str):
     return score >= 6 or ml_conf > 0.70, confidence
 
 # =========================================================
-# 🔥 MAIN HACKATHON ENDPOINT (THIS FIXES EVERYTHING)
+# 🔥 HACKATHON REQUIRED ENDPOINT (ONLY ADDITION)
 # =========================================================
 @app.post("/")
-async def main_api(request: Request, x_api_key: str = Header(None)):
+async def hackathon_api(request: Request, x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(status_code=401)
 
     body = await request.json()
     text = body.get("message", {}).get("text", "")
-
     scam, conf = detect(text)
 
     return {
@@ -135,14 +130,77 @@ async def main_api(request: Request, x_api_key: str = Header(None)):
     }
 
 # =========================================================
-# LANDING PAGE
+# LANDING PAGE (YOUR OLD UI)
 # =========================================================
 @app.get("/", response_class=HTMLResponse)
 def landing():
-    return """<h1>RAKSHAK AI</h1><p>Agentic Scam Detection Honeypot</p>"""
+    return """
+<!DOCTYPE html>
+<html>
+<body style="background:#020617;color:white;font-family:Poppins;text-align:center;padding-top:100px">
+<h1>RAKSHAK AI</h1>
+<p>Agentic Scam Detection Honeypot</p>
+<a href="/user">User Portal</a> | <a href="/admin">Admin Dashboard</a>
+</body>
+</html>
+"""
 
 # =========================================================
-# ORIGINAL HONEYPOT API (KEPT)
+# USER PORTAL (UNCHANGED)
+# =========================================================
+@app.get("/user", response_class=HTMLResponse)
+def user():
+    return """
+<!DOCTYPE html>
+<html>
+<body style="background:#020617;color:white;font-family:Poppins;padding:40px">
+<h2>Scam Message Checker</h2>
+<textarea id="msg" style="width:100%;height:120px"></textarea><br><br>
+<button onclick="go()">Analyze</button>
+<h3 id="out"></h3>
+<script>
+async function go(){
+ const r = await fetch("/honeypot",{
+  method:"POST",
+  headers:{
+    "Content-Type":"application/json",
+    "x-api-key":"rakshak-secret-key"
+  },
+  body:JSON.stringify({message:msg.value})
+ });
+ const d = await r.json();
+ out.innerHTML = d.scam_detected ?
+ "⚠️ SCAM ("+Math.round(d.confidence*100)+"%)" :
+ "✅ SAFE ("+Math.round(d.confidence*100)+"%)";
+}
+</script>
+<br><a href="/">⬅ Back</a>
+</body>
+</html>
+"""
+
+# =========================================================
+# ADMIN DASHBOARD (UNCHANGED)
+# =========================================================
+@app.get("/admin", response_class=HTMLResponse)
+def admin():
+    return f"""
+<!DOCTYPE html>
+<html>
+<body style="background:#020617;color:white;font-family:Poppins;padding:40px">
+<h2>Admin Dashboard</h2>
+<p>Total Requests: {STATS['total']}</p>
+<p>Scams Detected: {STATS['scam']}</p>
+<p>Safe Messages: {STATS['safe']}</p>
+<p>Keywords Count: {len(SCAM_KEYWORDS)}</p>
+<p>Dataset Size: {len(DATASET)}</p>
+<a href="/">⬅ Back</a>
+</body>
+</html>
+"""
+
+# =========================================================
+# ORIGINAL HONEYPOT API (UNCHANGED)
 # =========================================================
 @app.post("/honeypot", response_model=HoneypotResponse)
 def honeypot(data: HoneypotRequest, x_api_key: str = Header(None)):
