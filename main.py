@@ -273,24 +273,31 @@ async function go(){
 </html>
 """
 
-@app.get("/admin", response_class=HTMLResponse)
+@@app.get("/admin", response_class=HTMLResponse)
 def admin():
+    try:
+        total = STATS.get("total", 0)
+        scam = STATS.get("scam", 0)
+        safe = STATS.get("safe", 0)
+    except:
+        total = scam = safe = 0
+
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
 <title>Admin | RAKSHAK AI</title>
 <style>
-body{background:#020617;color:white;font-family:Arial;padding:40px}
-.card{background:#111827;padding:20px;border-radius:12px;max-width:400px}
+body{{background:#020617;color:white;font-family:Arial;padding:40px}}
+.card{{background:#111827;padding:20px;border-radius:12px;max-width:400px}}
 </style>
 </head>
 <body>
 <h2>Admin Dashboard</h2>
 <div class="card">
-<p>Total Requests: {STATS['total']}</p>
-<p>Scams Detected: {STATS['scam']}</p>
-<p>Safe Messages: {STATS['safe']}</p>
+<p>Total Requests: {total}</p>
+<p>Scams Detected: {scam}</p>
+<p>Safe Messages: {safe}</p>
 </div>
 <br><a href="/">⬅ Back</a>
 </body>
