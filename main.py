@@ -201,7 +201,7 @@ async def hackathon_api(req: HackathonRequest, x_api_key: str = Header(None)):
     }
 
 # =========================================================
-# OLD UI (SAME ROUTES, JUST BEAUTIFIED)
+# OLD UI (BEAUTIFIED)
 # =========================================================
 @app.get("/", response_class=HTMLResponse)
 def landing():
@@ -273,7 +273,8 @@ async function go(){
 </html>
 """
 
-@@app.get("/admin", response_class=HTMLResponse)
+# ✅ FIXED LINE (ONLY ONE @)
+@app.get("/admin", response_class=HTMLResponse)
 def admin():
     try:
         total = STATS.get("total", 0)
