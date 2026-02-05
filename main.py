@@ -85,7 +85,7 @@ class HoneypotResponse(BaseModel):
     reply: str
 
 # =========================================================
-# CORE DETECTION (FIXED FALSE POSITIVES)
+# CORE DETECTION (FALSE POSITIVE FIXED)
 # =========================================================
 def detect(msg: str):
     msg = msg.lower().strip()
@@ -93,7 +93,6 @@ def detect(msg: str):
     ml_conf = 0.0
 
     HARD_TRIGGERS = ["otp", "verify", "account blocked", "send money"]
-
     for h in HARD_TRIGGERS:
         if h in msg:
             score += 3
@@ -131,13 +130,13 @@ def extract_intel(text: str):
     }
 
 # =========================================================
-# AGENT REPLY (HUMAN-LIKE)
+# AGENT REPLY
 # =========================================================
 def agent_reply():
     return "Why is my account being suspended?"
 
 # =========================================================
-# MAIN HACKATHON API (POST /)
+# MAIN HACKATHON API
 # =========================================================
 @app.post("/")
 async def hackathon_api(req: HackathonRequest, x_api_key: str = Header(None)):
@@ -286,7 +285,7 @@ body{{font-family:Segoe UI;background:#f8fafc;padding:40px}}
 """
 
 # =========================================================
-# SIMPLE HONEYPOT API (FOR USER UI)
+# HONEYPOT API (FOR UI)
 # =========================================================
 @app.post("/honeypot", response_model=HoneypotResponse)
 def honeypot(data: HoneypotRequest, x_api_key: str = Header(None)):
