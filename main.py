@@ -12,55 +12,24 @@ API_KEY = os.getenv("API_KEY", "rakshak-secret-key")
 GUVI_CALLBACK = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
 
 # =========================================================
-# MEMORY (MULTI-TURN)
+# MEMORY
 # =========================================================
 SESSION_INTEL = {}
 SESSION_CALLBACK_SENT = set()
-
-# =========================================================
-# LOAD DATASET
-# =========================================================
-DATASET = []
-try:
-    with open("scam_sentences.txt", "r", encoding="utf-8") as f:
-        DATASET = [i.strip().lower() for i in f if i.strip()]
-except:
-    pass
-
-# =========================================================
-# LOAD ML MODEL (OPTIONAL)
-# =========================================================
-ML_MODEL, VECTORIZER = None, None
-try:
-    ML_MODEL = pickle.load(open("model.pkl", "rb"))
-    VECTORIZER = pickle.load(open("vectorizer.pkl", "rb"))
-except:
-    pass
+STATS = {"total": 0, "scam": 0, "safe": 0}
 
 # =========================================================
 # KEYWORDS & REGEX
 # =========================================================
 BASE_KEYWORDS = [
-    "otp","send money","easy money","earn money","verify",
-    "account blocked","account suspended","bank alert",
-    "security alert","upi blocked","refund","kyc",
-    "aadhaar","pan","credit card","debit card","cvv",
-    "expiry","loan approved","processing fee",
-    "telegram job","whatsapp job","legal notice",
-    "customs","parcel seized","click here","urgent",
-    "final warning","limited time","immediate action"
+    "otp","send money","verify","account blocked",
+    "upi id","upi","refund","kyc","urgent",
+    "immediately","bank alert","security alert"
 ]
-
-SCAM_KEYWORDS = []
-for k in BASE_KEYWORDS:
-    for p in ["", " now", " immediately", " urgently", " please"]:
-        SCAM_KEYWORDS.append(k + p)
 
 UPI_REGEX = r"[\w.-]+@[\w.-]+"
 URL_REGEX = r"https?://[^\s]+"
 PHONE_REGEX = r"\+?\d{10,13}"
-
-STATS = {"total": 0, "scam": 0, "safe": 0}
 
 # =========================================================
 # MODELS
@@ -85,36 +54,37 @@ class HoneypotResponse(BaseModel):
     reply: str
 
 # =========================================================
-# CORE DETECTION (FALSE POSITIVE FIXED)
+# 🔥 FIXED DETECTION LOGIC
 # =========================================================
 def detect(msg: str):
     msg = msg.lower().strip()
     score = 0
-    ml_conf = 0.0
 
-    HARD_TRIGGERS = ["otp", "verify", "account blocked", "send money"]
-    for h in HARD_TRIGGERS:
-        if h in msg:
-            score += 3
-
-    if re.search(UPI_REGEX, msg):
+    # HARD SCAM TRIGGERS
+    if "otp" in msg:
+        score += 5
+    if "upi id" in msg or "upi" in msg:
+        score += 5
+    if "account blocked" in msg:
         score += 4
+    if "send money" in msg:
+        score += 4
+    if "immediately" in msg or "urgent" in msg:
+        score += 3
+
+    # LINKS / IDS
+    if re.search(UPI_REGEX, msg):
+        score += 5
     if re.search(URL_REGEX, msg):
         score += 3
 
-    for k in SCAM_KEYWORDS:
+    # KEYWORD BOOST
+    for k in BASE_KEYWORDS:
         if k in msg:
             score += 1
 
-    if ML_MODEL and VECTORIZER:
-        try:
-            vec = VECTORIZER.transform([msg])
-            ml_conf = ML_MODEL.predict_proba(vec)[0][1]
-            score += int(ml_conf * 4)
-        except:
-            pass
-
     confidence = min(score / 12, 1.0)
+
     return score >= 5, confidence
 
 # =========================================================
@@ -136,7 +106,7 @@ def agent_reply():
     return "Why is my account being suspended?"
 
 # =========================================================
-# MAIN HACKATHON API
+# MAIN HACKATHON API (POST /)
 # =========================================================
 @app.post("/")
 async def hackathon_api(req: HackathonRequest, x_api_key: str = Header(None)):
@@ -170,7 +140,7 @@ async def hackathon_api(req: HackathonRequest, x_api_key: str = Header(None)):
                 "scamDetected": True,
                 "totalMessagesExchanged": len(req.conversationHistory) + 1,
                 "extractedIntelligence": SESSION_INTEL[session_id],
-                "agentNotes": "Urgency and payment redirection observed"
+                "agentNotes": "UPI + urgency based financial scam detected"
             }
             try:
                 requests.post(GUVI_CALLBACK, json=payload, timeout=5)
@@ -189,30 +159,12 @@ async def hackathon_api(req: HackathonRequest, x_api_key: str = Header(None)):
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
-<!DOCTYPE html>
-<html>
-<head>
-<title>RAKSHAK AI</title>
-<style>
-body{font-family:Segoe UI;background:#f1f5f9;margin:0}
-.header{background:#0f172a;color:white;padding:20px}
-.container{text-align:center;padding:60px}
-a{padding:14px 28px;background:#2563eb;color:white;
-border-radius:6px;text-decoration:none;margin:10px;display:inline-block}
-.footer{margin-top:60px;color:#475569}
-</style>
-</head>
-<body>
-<div class="header"><h2>RAKSHAK AI</h2></div>
-<div class="container">
-<h1>Agentic Scam Detection System</h1>
-<a href="/user">User Portal</a>
-<a href="/admin">Admin Dashboard</a>
-<div class="footer">RAKSHAK AI – Developed by Irfan Yasin</div>
-</div>
-</body>
-</html>
-"""
+    <h1>RAKSHAK AI</h1>
+    <p>Agentic Scam Detection Honeypot</p>
+    <a href="/user">User Portal</a> |
+    <a href="/admin">Admin Dashboard</a>
+    <p>Developed by Irfan Yasin</p>
+    """
 
 # =========================================================
 # USER UI
@@ -220,41 +172,27 @@ border-radius:6px;text-decoration:none;margin:10px;display:inline-block}
 @app.get("/user", response_class=HTMLResponse)
 def user():
     return """
-<!DOCTYPE html>
-<html>
-<head>
-<title>User | RAKSHAK AI</title>
-<style>
-body{font-family:Segoe UI;background:#020617;color:white;padding:40px}
-textarea{width:100%;height:120px;border-radius:6px;padding:10px}
-button{padding:10px 22px;background:#22c55e;border:none;border-radius:6px}
-.result{margin-top:20px;font-size:1.2rem}
-</style>
-</head>
-<body>
-<h2>Scam Message Checker</h2>
-<textarea id="msg" placeholder="Paste message here..."></textarea><br><br>
-<button onclick="go()">Analyze</button>
-<div id="out" class="result"></div>
-<script>
-async function go(){
- const r = await fetch("/honeypot",{
-  method:"POST",
-  headers:{
-    "Content-Type":"application/json",
-    "x-api-key":"rakshak-secret-key"
-  },
-  body:JSON.stringify({message:msg.value})
- });
- const d = await r.json();
- out.innerHTML = d.scam_detected
- ? "🚨 Potential Scam ("+Math.round(d.confidence*100)+"%)"
- : "🟢 Message Looks Safe";
-}
-</script>
-</body>
-</html>
-"""
+    <h2>Scam Message Checker</h2>
+    <textarea id="msg" style="width:100%;height:120px"></textarea><br><br>
+    <button onclick="go()">Analyze</button>
+    <h3 id="out"></h3>
+    <script>
+    async function go(){
+      const r = await fetch("/honeypot",{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":"rakshak-secret-key"
+        },
+        body:JSON.stringify({message:msg.value})
+      });
+      const d = await r.json();
+      out.innerHTML = d.scam_detected
+        ? "🚨 SCAM ("+Math.round(d.confidence*100)+"%)"
+        : "🟢 SAFE";
+    }
+    </script>
+    """
 
 # =========================================================
 # ADMIN UI
@@ -262,30 +200,15 @@ async function go(){
 @app.get("/admin", response_class=HTMLResponse)
 def admin():
     return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Admin | RAKSHAK AI</title>
-<style>
-body{{font-family:Segoe UI;background:#f8fafc;padding:40px}}
-.card{{background:white;padding:20px;border-radius:8px;width:320px}}
-</style>
-</head>
-<body>
-<h2>Admin Dashboard</h2>
-<div class="card">
-<p>Total Requests: {STATS['total']}</p>
-<p>Scams Detected: {STATS['scam']}</p>
-<p>Safe Messages: {STATS['safe']}</p>
-</div>
-<br>
-<p>RAKSHAK AI – Developed by Irfan Yasin</p>
-</body>
-</html>
-"""
+    <h2>Admin Dashboard</h2>
+    <p>Total Requests: {STATS['total']}</p>
+    <p>Scams Detected: {STATS['scam']}</p>
+    <p>Safe Messages: {STATS['safe']}</p>
+    <p>Developed by Irfan Yasin</p>
+    """
 
 # =========================================================
-# HONEYPOT API (FOR UI)
+# HONEYPOT API (FOR CURL / UI)
 # =========================================================
 @app.post("/honeypot", response_model=HoneypotResponse)
 def honeypot(data: HoneypotRequest, x_api_key: str = Header(None)):
